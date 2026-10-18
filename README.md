@@ -23,6 +23,9 @@ back to you instantly.
 - **6-pose avatar animation** — distinct listening and thinking poses plus
   two alternating talk frames, and the lip animation starts only when the
   voice is actually audible
+- **Animation & voice toggles** — one tap turns the animated avatar into a
+  still picture (person icon) or mutes the spoken answers (speaker icon);
+  both are available in Settings too and are remembered across sessions
 - **Ask anything** — configured for open, direct answers across topics
 - **Android app** — signed WebView-shell APK with a cyber-robin launcher icon
 

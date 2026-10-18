@@ -11,12 +11,14 @@ import {
   Sparkles,
   Globe,
   KeyRound,
+  PersonStanding,
   X,
   Eye,
   EyeOff,
   ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -59,6 +61,7 @@ export default function AssistantApp() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [textInput, setTextInput] = useState('');
   const [muted, setMuted] = useState(false);
+  const [animated, setAnimated] = useState(true);
   const [showHint, setShowHint] = useState(true);
   const [lang, setLang] = useState<LangMode>('auto');
   const [showSettings, setShowSettings] = useState(false);
@@ -89,6 +92,10 @@ export default function AssistantApp() {
     try {
       const saved = window.localStorage.getItem('robin-lang');
       if (saved === 'auto' || saved === 'en' || saved === 'ta') setLang(saved);
+      // Voice + animation preferences survive reloads
+      if (window.localStorage.getItem('robin-muted') === '1') setMuted(true);
+      if (window.localStorage.getItem('robin-anim') === '0')
+        setAnimated(false);
       const k = window.localStorage.getItem('robin-api-key') || '';
       setApiKey(k);
       setHasKey(!!k);
@@ -497,6 +504,39 @@ export default function AssistantApp() {
     }
   };
 
+  /* ---------- Experience toggles (header buttons + Settings switches) ---------- */
+
+  // Voice output ON/OFF — persisted. Turning it off cuts any speech mid-word.
+  const applyVoice = useCallback((enabled: boolean) => {
+    setMuted(!enabled);
+    try {
+      window.localStorage.setItem('robin-muted', enabled ? '0' : '1');
+    } catch {
+      /* private mode */
+    }
+    if (!enabled) {
+      speakTokenRef.current += 1;
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+      setState((s) => (s === 'speaking' ? 'idle' : s));
+    }
+  }, []);
+
+  // Girl animation ON/OFF — persisted. Off = still picture, everything else works.
+  const applyAnimated = useCallback((v: boolean) => {
+    setAnimated(v);
+    try {
+      window.localStorage.setItem('robin-anim', v ? '1' : '0');
+    } catch {
+      /* private mode */
+    }
+  }, []);
+
   return (
     <div className="min-h-screen w-full flex flex-col bg-gradient-to-b from-[#0a0a1a] via-[#0d1126] to-[#050510] text-white relative overflow-hidden">
       {/* Ambient aurora background */}
@@ -530,22 +570,22 @@ export default function AssistantApp() {
       </div>
 
       {/* Header */}
-      <header className="relative z-10 px-6 py-5 flex items-center justify-between border-b border-white/5">
-        <div className="flex items-center gap-3">
+      <header className="relative z-10 px-3 sm:px-6 py-4 sm:py-5 flex items-center justify-between border-b border-white/5">
+        <div className="flex items-center gap-2 sm:gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 to-violet-500 flex items-center justify-center shadow-lg shadow-cyan-500/20">
             <Sparkles className="w-5 h-5 text-white" />
           </div>
           <div>
             <h1 className="text-lg font-semibold tracking-tight">ROBIN AI</h1>
-            <p className="text-xs text-white/50">Your AI Companion</p>
+            <p className="text-xs text-white/50 hidden sm:block">Your AI Companion</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-0.5 sm:gap-2">
           <Button
             variant="ghost"
             size="sm"
             onClick={cycleLang}
-            className="text-white/70 hover:text-white hover:bg-white/10 gap-1.5 px-3"
+            className="text-white/70 hover:text-white hover:bg-white/10 gap-1.5 px-2 sm:px-3"
             title={LANG_META[lang].title}
           >
             <Globe className="w-4 h-4" />
@@ -556,7 +596,7 @@ export default function AssistantApp() {
             size="icon"
             onClick={() => setShowSettings(true)}
             className={cn(
-              'hover:bg-white/10',
+              'hover:bg-white/10 h-8 w-8',
               hasKey
                 ? 'text-cyan-300 hover:text-cyan-200'
                 : 'text-white/70 hover:text-white'
@@ -568,9 +608,28 @@ export default function AssistantApp() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setMuted((m) => !m)}
-            className="text-white/70 hover:text-white hover:bg-white/10"
-            title={muted ? 'Unmute speaker' : 'Mute speaker'}
+            onClick={() => applyAnimated(!animated)}
+            className={cn(
+              'hover:bg-white/10 h-8 w-8',
+              animated
+                ? 'text-white/70 hover:text-white'
+                : 'text-white/30 hover:text-white/60'
+            )}
+            title={animated ? 'Girl animation: on' : 'Girl animation: off'}
+          >
+            <PersonStanding className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => applyVoice(muted)}
+            className={cn(
+              'hover:bg-white/10 h-8 w-8',
+              muted
+                ? 'text-rose-300 hover:text-rose-200'
+                : 'text-white/70 hover:text-white'
+            )}
+            title={muted ? 'Voice output: off' : 'Voice output: on'}
           >
             {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </Button>
@@ -578,7 +637,7 @@ export default function AssistantApp() {
             variant="ghost"
             size="icon"
             onClick={clearChat}
-            className="text-white/70 hover:text-white hover:bg-white/10"
+            className="text-white/70 hover:text-white hover:bg-white/10 h-8 w-8"
             title="Clear conversation"
           >
             <Trash2 className="w-4 h-4" />
@@ -599,6 +658,7 @@ export default function AssistantApp() {
               state={state}
               onToggle={handleCompanionToggle}
               audioLevelRef={audioLevelRef}
+              animated={animated}
             />
           </motion.div>
 
@@ -736,6 +796,48 @@ export default function AssistantApp() {
                 key stays on this device and is only sent with your chat
                 requests to this app&apos;s server.
               </p>
+
+              {/* Experience toggles */}
+              <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-white/90 flex items-center gap-2">
+                      <PersonStanding className="w-3.5 h-3.5 text-cyan-300" />
+                      Girl animation
+                    </p>
+                    <p className="text-[11px] text-white/40 leading-snug">
+                      Poses, blinking &amp; lip-sync. Off = still picture.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={animated}
+                    onCheckedChange={applyAnimated}
+                    className="data-[state=checked]:bg-cyan-500"
+                    aria-label="Toggle girl animation"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-white/90 flex items-center gap-2">
+                      {muted ? (
+                        <VolumeX className="w-3.5 h-3.5 text-rose-300" />
+                      ) : (
+                        <Volume2 className="w-3.5 h-3.5 text-cyan-300" />
+                      )}
+                      Voice output
+                    </p>
+                    <p className="text-[11px] text-white/40 leading-snug">
+                      Speak answers out loud. Off = text only.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={!muted}
+                    onCheckedChange={applyVoice}
+                    className="data-[state=checked]:bg-cyan-500"
+                    aria-label="Toggle voice output"
+                  />
+                </div>
+              </div>
 
               <label className="block text-[11px] font-medium text-white/60 mb-1">
                 API key

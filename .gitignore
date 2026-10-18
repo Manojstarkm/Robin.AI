@@ -70,3 +70,6 @@ scripts/*.png
 scripts/*.wav
 scripts/*.mp3
 agent-ctx/
+# scaffold demo dirs (not part of the app)
+/examples/
+/tool-results/

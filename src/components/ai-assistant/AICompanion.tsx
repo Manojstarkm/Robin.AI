@@ -10,6 +10,8 @@ interface AICompanionProps {
   onToggle?: () => void;
   /** Live mic amplitude (0..1) — drives the reactive aura while listening */
   audioLevelRef?: { current: number };
+  /** When false the girl is a still picture — no loops, no lip-flap, no particles */
+  animated?: boolean;
 }
 
 const STATE: Record<
@@ -73,6 +75,7 @@ export default function AICompanion({
   state,
   onToggle,
   audioLevelRef,
+  animated = true,
 }: AICompanionProps) {
   const [blink, setBlink] = useState(false);
   const [talking, setTalking] = useState(false);
@@ -84,6 +87,7 @@ export default function AICompanion({
 
   /* --- Blink loop: natural random blinks every 2.6–5.8s --- */
   useEffect(() => {
+    if (!animated) return;
     let alive = true;
     let t1 = 0;
     let t2 = 0;
@@ -105,11 +109,11 @@ export default function AICompanion({
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, []);
+  }, [animated]);
 
   /* --- Talk loop: alternate two mouth shapes while she is speaking --- */
   useEffect(() => {
-    if (state !== 'speaking') return;
+    if (state !== 'speaking' || !animated) return;
     let alive = true;
     let t = 0;
     const flip = () => {
@@ -122,11 +126,11 @@ export default function AICompanion({
       alive = false;
       clearTimeout(t);
     };
-  }, [state]);
+  }, [state, animated]);
 
   /* --- Audio-reactive listening: mic level drives the voice-glow layer --- */
   useEffect(() => {
-    if (state !== 'listening' || !audioLevelRef) return;
+    if (state !== 'listening' || !audioLevelRef || !animated) return;
     let raf = 0;
     const tick = () => {
       const el = voiceGlowRef.current;
@@ -155,6 +159,7 @@ export default function AICompanion({
   const rotY = useSpring(rawY, { stiffness: 55, damping: 14, mass: 0.6 });
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (!animated) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const nx = (e.clientX - rect.left) / rect.width - 0.5;
@@ -208,44 +213,62 @@ export default function AICompanion({
         two alternating talk frames (real lip-flap while audio plays)
       */}
       {/* ===== Layer 1: state aura glow ===== */}
-      <motion.div
-        className="absolute left-1/2 top-[40%] h-[85%] w-[85%] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
-        animate={{
-          backgroundColor: `rgba(${conf.rgb},${conf.aura})`,
-          scale: [1, 1.12],
-        }}
-        transition={{
-          backgroundColor: { duration: 1.1, ease: 'easeInOut' },
-          scale: { duration: 4.5, repeat: Infinity, ease: 'easeInOut' },
-        }}
-      />
+      {animated ? (
+        <motion.div
+          className="absolute left-1/2 top-[40%] h-[85%] w-[85%] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+          animate={{
+            backgroundColor: `rgba(${conf.rgb},${conf.aura})`,
+            scale: [1, 1.12],
+          }}
+          transition={{
+            backgroundColor: { duration: 1.1, ease: 'easeInOut' },
+            scale: { duration: 4.5, repeat: Infinity, ease: 'easeInOut' },
+          }}
+        />
+      ) : (
+        <div
+          className="absolute left-1/2 top-[40%] h-[85%] w-[85%] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl transition-colors duration-1000"
+          style={{ backgroundColor: `rgba(${conf.rgb},${conf.aura})` }}
+        />
+      )}
       {/* voice-reactive glow (mic amplitude while listening) */}
-      <div
-        ref={voiceGlowRef}
-        className="absolute left-1/2 top-[40%] h-[80%] w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 blur-2xl"
-        style={{
-          backgroundColor: 'rgba(52,211,153,0.85)',
-        }}
-      />
+      {animated && (
+        <div
+          ref={voiceGlowRef}
+          className="absolute left-1/2 top-[40%] h-[80%] w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 blur-2xl"
+          style={{
+            backgroundColor: 'rgba(52,211,153,0.85)',
+          }}
+        />
+      )}
 
       {/* ===== Layer 2: orbital rings ===== */}
-      <div
-        className="absolute left-1/2 top-[40%] h-[74%] w-[74%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed opacity-40 transition-colors duration-1000"
-        style={{
-          borderColor: conf.hex,
-          animation: 'aura-spin 14s linear infinite',
-        }}
-      />
-      <div
-        className="absolute left-1/2 top-[40%] h-[92%] w-[92%] -translate-x-1/2 -translate-y-1/2 rounded-full border opacity-20 transition-colors duration-1000"
-        style={{
-          borderColor: conf.hex,
-          animation: 'aura-spin 22s linear infinite reverse',
-        }}
-      />
+      {animated ? (
+        <>
+          <div
+            className="absolute left-1/2 top-[40%] h-[74%] w-[74%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed opacity-40 transition-colors duration-1000"
+            style={{
+              borderColor: conf.hex,
+              animation: 'aura-spin 14s linear infinite',
+            }}
+          />
+          <div
+            className="absolute left-1/2 top-[40%] h-[92%] w-[92%] -translate-x-1/2 -translate-y-1/2 rounded-full border opacity-20 transition-colors duration-1000"
+            style={{
+              borderColor: conf.hex,
+              animation: 'aura-spin 22s linear infinite reverse',
+            }}
+          />
+        </>
+      ) : (
+        <div
+          className="absolute left-1/2 top-[40%] h-[80%] w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 opacity-30 transition-colors duration-1000"
+          style={{ borderColor: conf.hex }}
+        />
+      )}
 
       {/* Listening sonar rings */}
-      {state === 'listening' && (
+      {animated && state === 'listening' && (
         <>
           {[0, 1, 2].map((i) => (
             <motion.div
@@ -265,7 +288,7 @@ export default function AICompanion({
       )}
 
       {/* Speaking pulse rings */}
-      {state === 'speaking' && (
+      {animated && state === 'speaking' && (
         <>
           {[0, 1].map((i) => (
             <motion.div
@@ -285,7 +308,7 @@ export default function AICompanion({
       )}
 
       {/* Thinking orbit dots */}
-      {state === 'thinking' && (
+      {animated && state === 'thinking' && (
         <div
           className="absolute left-1/2 top-[13%] h-16 w-16 -translate-x-1/2"
           style={{ animation: 'aura-spin 2.4s linear infinite' }}
@@ -304,6 +327,7 @@ export default function AICompanion({
       )}
 
       {/* ===== Layer 3: the girl (base / blink / talk crossfading frames) ===== */}
+      {animated ? (
       <motion.div
         className="absolute inset-0"
         style={{
@@ -419,24 +443,44 @@ export default function AICompanion({
           />
         </motion.div>
       </motion.div>
+      ) : (
+        <div className="absolute inset-0">
+          <img
+            src="/robin-girl.png"
+            alt="ROBIN"
+            draggable={false}
+            className="absolute inset-0 h-full w-full object-cover object-top"
+            style={maskStyle}
+          />
+          {/* single state tint wash — the only "live" thing left in static mode */}
+          <div
+            className="pointer-events-none absolute inset-0 transition-colors duration-1000"
+            style={{
+              ...maskStyle,
+              backgroundColor: `rgba(${conf.rgb},0.14)`,
+            }}
+          />
+        </div>
+      )}
 
       {/* ===== Layer 4: floating particles ===== */}
-      {PARTICLES.map((p, i) => (
-        <span
-          key={i}
-          className="pointer-events-none absolute rounded-full transition-colors duration-1000"
-          style={{
-            left: p.left,
-            top: p.top,
-            width: p.size,
-            height: p.size,
-            backgroundColor: conf.hex,
-            opacity: 0.55,
-            boxShadow: `0 0 ${p.size * 3}px ${conf.hex}`,
-            animation: `aura-float ${p.dur}s ease-in-out ${p.delay}s infinite`,
-          }}
-        />
-      ))}
+      {animated &&
+        PARTICLES.map((p, i) => (
+          <span
+            key={i}
+            className="pointer-events-none absolute rounded-full transition-colors duration-1000"
+            style={{
+              left: p.left,
+              top: p.top,
+              width: p.size,
+              height: p.size,
+              backgroundColor: conf.hex,
+              opacity: 0.55,
+              boxShadow: `0 0 ${p.size * 3}px ${conf.hex}`,
+              animation: `aura-float ${p.dur}s ease-in-out ${p.delay}s infinite`,
+            }}
+          />
+        ))}
 
       {/* ===== Layer 5: click ripples ===== */}
       {ripples.map((r) => (

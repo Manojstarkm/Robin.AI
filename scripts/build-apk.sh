@@ -30,8 +30,8 @@ echo "==> aapt2 link"
     --java "$BUILD/gen" \
     --min-sdk-version 23 \
     --target-sdk-version 34 \
-    --version-code 3 \
-    --version-name 1.2.0 \
+    --version-code 4 \
+    --version-name 1.3.0 \
     "$BUILD/res.zip"
 
 echo "==> javac"
