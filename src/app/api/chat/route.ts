@@ -11,9 +11,12 @@ interface ChatMessage {
 const DEFAULT_API_BASE = 'https://api.z.ai/api/paas/v4';
 const DEFAULT_MODEL = 'glm-4.5-flash';
 
-/* ---------- Provider auto-detection ----------
-   Users paste keys from many vendors; the key's prefix tells us where to
-   send it, so a Google key works with zero configuration. */
+/* ---------- Key sanitizing + provider auto-detection ----------
+   Keys are pasted by hand on phone keyboards and often arrive surrounded
+   by junk: zero-width spaces, smart quotes, newlines, labels like
+   "Key: …" or "API key: …". That junk breaks the Authorization header
+   (fetch throws instantly) and hides the key's prefix from detection.
+   So: keep printable ASCII only, then EXTRACT a known key shape. */
 interface ProviderPreset {
   name: string;
   base: string;
@@ -21,45 +24,65 @@ interface ProviderPreset {
   fallbackModels: string[];
 }
 
-function detectProvider(key: string): ProviderPreset {
-  if (key.startsWith('AIza')) {
-    return {
-      name: 'Google Gemini',
-      base: 'https://generativelanguage.googleapis.com/v1beta/openai',
-      model: 'gemini-2.5-flash',
-      fallbackModels: ['gemini-2.0-flash', 'gemini-flash-latest'],
-    };
-  }
-  if (key.startsWith('sk-or-')) {
-    return {
-      name: 'OpenRouter',
-      base: 'https://openrouter.ai/api/v1',
-      model: 'google/gemini-2.0-flash-exp:free',
-      fallbackModels: ['meta-llama/llama-3.3-70b-instruct:free'],
-    };
-  }
-  if (key.startsWith('sk-ant-')) {
-    return {
-      name: 'Anthropic',
-      base: 'https://api.anthropic.com/v1',
-      model: 'claude-3-5-haiku-latest',
-      fallbackModels: [],
-    };
-  }
-  if (key.startsWith('sk-')) {
-    return {
-      name: 'OpenAI',
-      base: 'https://api.openai.com/v1',
-      model: 'gpt-4o-mini',
-      fallbackModels: ['gpt-4.1-mini'],
-    };
-  }
-  return {
+const PRESETS: Record<string, ProviderPreset> = {
+  'Google Gemini': {
+    name: 'Google Gemini',
+    base: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    model: 'gemini-2.5-flash',
+    fallbackModels: ['gemini-2.0-flash', 'gemini-flash-latest'],
+  },
+  OpenRouter: {
+    name: 'OpenRouter',
+    base: 'https://openrouter.ai/api/v1',
+    model: 'google/gemini-2.0-flash-exp:free',
+    fallbackModels: ['meta-llama/llama-3.3-70b-instruct:free'],
+  },
+  Anthropic: {
+    name: 'Anthropic',
+    base: 'https://api.anthropic.com/v1',
+    model: 'claude-3-5-haiku-latest',
+    fallbackModels: [],
+  },
+  OpenAI: {
+    name: 'OpenAI',
+    base: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    fallbackModels: ['gpt-4.1-mini'],
+  },
+  'Z.ai': {
     name: 'Z.ai',
     base: DEFAULT_API_BASE,
     model: DEFAULT_MODEL,
     fallbackModels: [],
-  };
+  },
+};
+
+const KEY_SHAPES: { provider: string; re: RegExp }[] = [
+  { provider: 'Google Gemini', re: /(AIza[0-9A-Za-z_-]{10,})/ },
+  { provider: 'OpenRouter', re: /(sk-or-[0-9A-Za-z_-]{10,})/ },
+  { provider: 'Anthropic', re: /(sk-ant-[0-9A-Za-z_-]{10,})/ },
+  { provider: 'OpenAI', re: /(sk-[0-9A-Za-z_-]{20,})/ },
+];
+
+function sanitizeKey(raw: string): string {
+  return raw
+    .replace(/[^ -~]/g, '') // printable ASCII only — kills zero-width chars, BOMs, smart quotes, control chars
+    .replace(/^["'`]+|["'`]+$/g, '') // wrapping quotes
+    .trim();
+}
+
+function extractKnownKey(s: string): { key: string; provider: string } | null {
+  for (const shape of KEY_SHAPES) {
+    const m = s.match(shape.re);
+    if (m) return { key: m[1], provider: shape.provider };
+  }
+  return null;
+}
+
+function sanitizeBase(raw: string): string {
+  let b = sanitizeKey(raw);
+  if (b && !/^https?:\/\//i.test(b)) b = `https://${b}`;
+  return b.replace(/\/+$/, '');
 }
 
 export async function POST(req: NextRequest) {
@@ -108,12 +131,15 @@ export async function POST(req: NextRequest) {
         : '');
 
     /* ---------- Path 1: user-supplied API key (OpenAI-compatible) ---------- */
-    const key = typeof apiKey === 'string' ? apiKey.trim() : '';
+    const key = sanitizeKey(typeof apiKey === 'string' ? apiKey : '');
     if (key) {
-      const provider = detectProvider(key);
-      const userBase = typeof apiBase === 'string' ? apiBase.trim() : '';
-      const userModel = typeof model === 'string' ? model.trim() : '';
-      const base = (userBase || provider.base).replace(/\/+$/, '');
+      const known = extractKnownKey(key);
+      const provider = PRESETS[known?.provider ?? 'Z.ai'];
+      const effectiveKey = known?.key ?? key;
+      const keyFP = `${effectiveKey.slice(0, 6)}…(len ${effectiveKey.length})`;
+      const userBase = sanitizeBase(typeof apiBase === 'string' ? apiBase : '');
+      const userModel = sanitizeKey(typeof model === 'string' ? model : '');
+      const base = userBase || provider.base;
       // An old Z.ai model name left in Settings would break other providers — drop it
       const mdl =
         userModel && !(provider.name !== 'Z.ai' && /^glm-/i.test(userModel))
@@ -144,7 +170,7 @@ export async function POST(req: NextRequest) {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${key}`,
+              Authorization: `Bearer ${effectiveKey}`,
             },
             body: JSON.stringify({
               model: candidates[i],
@@ -156,6 +182,10 @@ export async function POST(req: NextRequest) {
           });
         } catch (e) {
           if (e instanceof Error && e.name === 'AbortError') throw e;
+          console.error(
+            `[BYOK] network failure → ${provider.name} base=${base} key=${keyFP}:`,
+            e instanceof Error ? e.message : e
+          );
           return NextResponse.json(
             {
               success: false,
@@ -190,15 +220,28 @@ export async function POST(req: NextRequest) {
 
       if (!solved) {
         const authIssue = lastStatus === 401 || lastStatus === 403;
+        console.error(
+          `[BYOK] rejected by ${provider.name} key=${keyFP} status=${lastStatus}: ${lastDetail}`
+        );
+        let error: string;
+        if (provider.name === 'Z.ai') {
+          // No known key shape matched — most likely a mis-pasted Google key
+          error =
+            `This key wasn't recognized (Z.ai answered: ${lastDetail}). ` +
+            `A Google Gemini key starts with "AIza" — get one free at aistudio.google.com/apikey, ` +
+            `copy the whole key, and paste it alone (no labels or spaces) in Settings.`;
+        } else {
+          error =
+            `Your ${provider.name} API key was rejected (${lastStatus}): ${lastDetail}` +
+            (authIssue
+              ? ' — make sure the whole key was pasted and is still active.'
+              : '') +
+            (provider.name === 'Google Gemini' && lastStatus === 403
+              ? ' If the key has API restrictions, create a new one without them.'
+              : '');
+        }
         return NextResponse.json(
-          {
-            success: false,
-            error:
-              `Your ${provider.name} API key was rejected (${lastStatus}): ${lastDetail}` +
-              (authIssue
-                ? ` — Open Settings (key icon) and re-paste the full ${provider.name} key.`
-                : ''),
-          },
+          { success: false, error },
           { status: 502 }
         );
       }

@@ -17,6 +17,7 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -52,15 +53,45 @@ const MODEL_PLACEHOLDER = 'glm-4.5-flash';
 const GET_KEY_URL = 'https://z.ai/manage-apikey/apikey-list';
 const GET_GEMINI_KEY_URL = 'https://aistudio.google.com/apikey';
 
-// Mirror of the server-side provider detection — purely for UI hints
+// Keys pasted on phones often carry invisible junk (zero-width spaces,
+// smart quotes, labels like "Key: …"). Strip everything that is not
+// printable ASCII, then EXTRACT a known key shape — mirrors the server.
+function sanitizeKey(k: string): string {
+  return k
+    .replace(/[^ -~]/g, '')
+    .replace(/["'`]+/g, '')
+    .trim();
+}
+
+const KEY_SHAPES: { provider: string; re: RegExp }[] = [
+  { provider: 'Google Gemini', re: /(AIza[0-9A-Za-z_-]{10,})/ },
+  { provider: 'OpenRouter', re: /(sk-or-[0-9A-Za-z_-]{10,})/ },
+  { provider: 'Anthropic', re: /(sk-ant-[0-9A-Za-z_-]{10,})/ },
+  { provider: 'OpenAI', re: /(sk-[0-9A-Za-z_-]{20,})/ },
+];
+
+function extractKnownKey(s: string): string | null {
+  for (const shape of KEY_SHAPES) {
+    const m = s.match(shape.re);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// Mirror of the server-side provider detection — '' means unrecognized
 function detectKeyName(k: string): string {
-  const t = k.trim();
-  if (!t) return '';
-  if (t.startsWith('AIza')) return 'Google Gemini';
-  if (t.startsWith('sk-or-')) return 'OpenRouter';
-  if (t.startsWith('sk-ant-')) return 'Anthropic';
-  if (t.startsWith('sk-')) return 'OpenAI';
-  return 'Z.ai';
+  const s = sanitizeKey(k);
+  if (!s) return '';
+  for (const shape of KEY_SHAPES) {
+    if (shape.re.test(s)) return shape.provider;
+  }
+  return '';
+}
+
+// Sanitize + extract — heals keys saved by older versions with junk around them
+function healKey(raw: string): string {
+  const s = sanitizeKey(raw);
+  return extractKnownKey(s) ?? s;
 }
 
 interface Message {
@@ -109,9 +140,17 @@ export default function AssistantApp() {
       if (window.localStorage.getItem('robin-muted') === '1') setMuted(true);
       if (window.localStorage.getItem('robin-anim') === '0')
         setAnimated(false);
-      const k = window.localStorage.getItem('robin-api-key') || '';
+      const k = healKey(window.localStorage.getItem('robin-api-key') || '');
       setApiKey(k);
       setHasKey(!!k);
+      // If an older save carried junk around the key, persist the healed copy
+      try {
+        const stored = window.localStorage.getItem('robin-api-key');
+        if (stored !== null && stored !== k)
+          window.localStorage.setItem('robin-api-key', k);
+      } catch {
+        /* private mode */
+      }
       setApiBase(window.localStorage.getItem('robin-api-base') || '');
       setModel(window.localStorage.getItem('robin-api-model') || '');
       // Conversation history survives reloads too
@@ -937,14 +976,32 @@ export default function AssistantApp() {
 
               {(() => {
                 const detected = detectKeyName(apiKey);
-                if (!detected) return null;
-                return (
-                  <p className="text-[11px] text-emerald-300/80 mb-3 flex items-center gap-1.5">
-                    <Sparkles className="w-3 h-3" />
-                    {detected} key detected — ROBIN connects to it
-                    automatically, no setup needed.
-                  </p>
-                );
+                if (detected) {
+                  return (
+                    <p className="text-[11px] text-emerald-300/80 mb-3 flex items-start gap-1.5">
+                      <Sparkles className="w-3 h-3 mt-0.5 shrink-0" />
+                      <span>
+                        {detected} key detected — ROBIN connects to it
+                        automatically, no setup needed.
+                      </span>
+                    </p>
+                  );
+                }
+                if (apiKey.trim()) {
+                  return (
+                    <p className="text-[11px] text-amber-300/90 mb-3 flex items-start gap-1.5">
+                      <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                      <span>
+                        ROBIN couldn&apos;t identify this key&apos;s provider.
+                        A Google Gemini key starts with{' '}
+                        <span className="font-mono">AIza</span> — if yours came
+                        from Google AI Studio, tap the link below, copy the
+                        whole key, and paste it again. Z.ai keys still work.
+                      </span>
+                    </p>
+                  );
+                }
+                return null;
               })()}
 
               <label className="block text-[11px] font-medium text-white/60 mb-1">
@@ -970,7 +1027,8 @@ export default function AssistantApp() {
               />
 
               <div className="flex flex-col gap-1 mb-4">
-                {detectKeyName(apiKey) === 'Google Gemini' ? (
+                {detectKeyName(apiKey) === 'Google Gemini' ||
+                !detectKeyName(apiKey) ? (
                   <>
                     <a
                       href={GET_GEMINI_KEY_URL}
@@ -1019,12 +1077,12 @@ export default function AssistantApp() {
                 <Button
                   className="flex-1 bg-gradient-to-r from-cyan-500 to-violet-500 hover:from-cyan-400 hover:to-violet-400 text-white border-0"
                   onClick={() => {
+                    // Save the healed key: junk stripped, buried key extracted
+                    const savedKey = healKey(apiKey);
+                    const providerName = detectKeyName(savedKey);
                     try {
-                      if (apiKey.trim()) {
-                        window.localStorage.setItem(
-                          'robin-api-key',
-                          apiKey.trim()
-                        );
+                      if (savedKey) {
+                        window.localStorage.setItem('robin-api-key', savedKey);
                       } else {
                         window.localStorage.removeItem('robin-api-key');
                       }
@@ -1047,14 +1105,23 @@ export default function AssistantApp() {
                     } catch {
                       /* private mode */
                     }
-                    setApiKey(apiKey.trim());
-                    setHasKey(!!apiKey.trim());
+                    setApiKey(savedKey);
+                    setHasKey(!!savedKey);
                     setShowSettings(false);
-                    toast.success(
-                      apiKey.trim()
-                        ? 'API key saved — ROBIN will use your own AI now'
-                        : 'API key cleared — using the built-in backend'
-                    );
+                    if (savedKey && providerName) {
+                      toast.success(
+                        `${providerName} key saved — ROBIN will use your own AI now`
+                      );
+                    } else if (savedKey) {
+                      toast('Key saved — but its provider is unrecognized', {
+                        description:
+                          'A Google Gemini key starts with "AIza". If yours came from Google AI Studio, re-paste the whole key.',
+                      });
+                    } else {
+                      toast.success(
+                        'API key cleared — using the built-in backend'
+                      );
+                    }
                   }}
                 >
                   Save
