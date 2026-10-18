@@ -17,9 +17,10 @@ back to you instantly.
 - **English + Tamil** — auto language detection plus a manual
   Auto / தமிழ் / English switch; Tamil uses native browser voices when
   available, with a server-side TTS fallback
-- **Bring your own API key** — paste a Z.ai (or any OpenAI-compatible) key
-  in Settings (key icon); ROBIN then calls the model directly with your key
-  (`glm-4.5-flash` is free) instead of relying on the shared backend
+- **Bring your own API key** — paste a key in Settings (key icon) and ROBIN
+  auto-detects the provider and routes to it: Google Gemini (free at
+  aistudio.google.com/apikey), OpenAI, OpenRouter, Anthropic or Z.ai —
+  no base URL or model configuration needed
 - **6-pose avatar animation** — distinct listening and thinking poses plus
   two alternating talk frames, and the lip animation starts only when the
   voice is actually audible

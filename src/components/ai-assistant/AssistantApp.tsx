@@ -50,6 +50,18 @@ const TAMIL_RE = /[\u0B80-\u0BFF]/;
 const API_BASE_PLACEHOLDER = 'https://api.z.ai/api/paas/v4';
 const MODEL_PLACEHOLDER = 'glm-4.5-flash';
 const GET_KEY_URL = 'https://z.ai/manage-apikey/apikey-list';
+const GET_GEMINI_KEY_URL = 'https://aistudio.google.com/apikey';
+
+// Mirror of the server-side provider detection — purely for UI hints
+function detectKeyName(k: string): string {
+  const t = k.trim();
+  if (!t) return '';
+  if (t.startsWith('AIza')) return 'Google Gemini';
+  if (t.startsWith('sk-or-')) return 'OpenRouter';
+  if (t.startsWith('sk-ant-')) return 'Anthropic';
+  if (t.startsWith('sk-')) return 'OpenAI';
+  return 'Z.ai';
+}
 
 interface Message {
   id: string;
@@ -360,7 +372,9 @@ export default function AssistantApp() {
           /401|403|x-token|unauthorized|api.?key|apikey/i.test(msg);
         toast.error('ROBIN hit a snag', {
           description: authIssue
-            ? `${msg} — Add your own free API key: tap the key icon above.`
+            ? hasKey
+              ? `${msg} — Check your key in Settings (key icon above).`
+              : `${msg} — Add your own free API key: tap the key icon above.`
             : msg,
         });
         if (speakTokenRef.current >= 0 && !ac.signal.aborted) setState('idle');
@@ -921,6 +935,18 @@ export default function AssistantApp() {
                 </button>
               </div>
 
+              {(() => {
+                const detected = detectKeyName(apiKey);
+                if (!detected) return null;
+                return (
+                  <p className="text-[11px] text-emerald-300/80 mb-3 flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3" />
+                    {detected} key detected — ROBIN connects to it
+                    automatically, no setup needed.
+                  </p>
+                );
+              })()}
+
               <label className="block text-[11px] font-medium text-white/60 mb-1">
                 API base URL <span className="text-white/30">(optional)</span>
               </label>
@@ -943,15 +969,51 @@ export default function AssistantApp() {
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 mb-2"
               />
 
-              <a
-                href={GET_KEY_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200 mb-4"
-              >
-                Get a free Z.ai API key — GLM-4.5-Flash is free
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              <div className="flex flex-col gap-1 mb-4">
+                {detectKeyName(apiKey) === 'Google Gemini' ? (
+                  <>
+                    <a
+                      href={GET_GEMINI_KEY_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200"
+                    >
+                      Get a free Gemini API key — Google AI Studio
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                    <a
+                      href={GET_KEY_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-white/40 hover:text-white/70"
+                    >
+                      Or get a free Z.ai key — GLM-4.5-Flash
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <a
+                      href={GET_KEY_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200"
+                    >
+                      Get a free Z.ai API key — GLM-4.5-Flash is free
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                    <a
+                      href={GET_GEMINI_KEY_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-white/40 hover:text-white/70"
+                    >
+                      Or get a free Gemini key — Google AI Studio
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </>
+                )}
+              </div>
 
               <div className="flex gap-2 mt-1">
                 <Button

@@ -11,6 +11,57 @@ interface ChatMessage {
 const DEFAULT_API_BASE = 'https://api.z.ai/api/paas/v4';
 const DEFAULT_MODEL = 'glm-4.5-flash';
 
+/* ---------- Provider auto-detection ----------
+   Users paste keys from many vendors; the key's prefix tells us where to
+   send it, so a Google key works with zero configuration. */
+interface ProviderPreset {
+  name: string;
+  base: string;
+  model: string;
+  fallbackModels: string[];
+}
+
+function detectProvider(key: string): ProviderPreset {
+  if (key.startsWith('AIza')) {
+    return {
+      name: 'Google Gemini',
+      base: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      model: 'gemini-2.5-flash',
+      fallbackModels: ['gemini-2.0-flash', 'gemini-flash-latest'],
+    };
+  }
+  if (key.startsWith('sk-or-')) {
+    return {
+      name: 'OpenRouter',
+      base: 'https://openrouter.ai/api/v1',
+      model: 'google/gemini-2.0-flash-exp:free',
+      fallbackModels: ['meta-llama/llama-3.3-70b-instruct:free'],
+    };
+  }
+  if (key.startsWith('sk-ant-')) {
+    return {
+      name: 'Anthropic',
+      base: 'https://api.anthropic.com/v1',
+      model: 'claude-3-5-haiku-latest',
+      fallbackModels: [],
+    };
+  }
+  if (key.startsWith('sk-')) {
+    return {
+      name: 'OpenAI',
+      base: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+      fallbackModels: ['gpt-4.1-mini'],
+    };
+  }
+  return {
+    name: 'Z.ai',
+    base: DEFAULT_API_BASE,
+    model: DEFAULT_MODEL,
+    fallbackModels: [],
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -59,13 +110,18 @@ export async function POST(req: NextRequest) {
     /* ---------- Path 1: user-supplied API key (OpenAI-compatible) ---------- */
     const key = typeof apiKey === 'string' ? apiKey.trim() : '';
     if (key) {
-      const base = (
-        typeof apiBase === 'string' && apiBase.trim()
-          ? apiBase.trim()
-          : DEFAULT_API_BASE
-      ).replace(/\/+$/, '');
+      const provider = detectProvider(key);
+      const userBase = typeof apiBase === 'string' ? apiBase.trim() : '';
+      const userModel = typeof model === 'string' ? model.trim() : '';
+      const base = (userBase || provider.base).replace(/\/+$/, '');
+      // An old Z.ai model name left in Settings would break other providers — drop it
       const mdl =
-        typeof model === 'string' && model.trim() ? model.trim() : DEFAULT_MODEL;
+        userModel && !(provider.name !== 'Z.ai' && /^glm-/i.test(userModel))
+          ? userModel
+          : provider.model;
+      // If the user picked the model themselves, respect it exactly;
+      // otherwise walk the provider's fallback list if a model name 404s.
+      const candidates = userModel ? [mdl] : [mdl, ...provider.fallbackModels];
 
       const upstreamMessages = [
         { role: 'system', content: systemPrompt },
@@ -76,46 +132,72 @@ export async function POST(req: NextRequest) {
         { role: 'user' as const, content: message },
       ];
 
-      let upstream: Response;
-      try {
-        upstream = await fetch(`${base}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${key}`,
-          },
-          body: JSON.stringify({
-            model: mdl,
-            messages: upstreamMessages,
-            temperature: 0.8,
-            stream: false,
-          }),
-          signal: req.signal,
-        });
-      } catch (e) {
-        if (e instanceof Error && e.name === 'AbortError') throw e;
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Could not reach ${base} — check the API base URL in Settings.`,
-          },
-          { status: 502 }
-        );
-      }
+      let raw = '';
+      let solved = false;
+      let lastStatus = 0;
+      let lastDetail = '';
 
-      const raw = await upstream.text();
-      if (!upstream.ok) {
-        let detail = raw.slice(0, 300);
+      for (let i = 0; i < candidates.length; i++) {
+        let res: Response;
+        try {
+          res = await fetch(`${base}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${key}`,
+            },
+            body: JSON.stringify({
+              model: candidates[i],
+              messages: upstreamMessages,
+              temperature: 0.8,
+              stream: false,
+            }),
+            signal: req.signal,
+          });
+        } catch (e) {
+          if (e instanceof Error && e.name === 'AbortError') throw e;
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Could not reach ${provider.name} at ${base} — check the API base URL in Settings.`,
+            },
+            { status: 502 }
+          );
+        }
+
+        raw = await res.text();
+        if (res.ok) {
+          solved = true;
+          break;
+        }
+
+        lastStatus = res.status;
+        lastDetail = raw.slice(0, 300);
         try {
           const j = JSON.parse(raw);
-          detail = j?.error?.message || j?.message || detail;
+          lastDetail = j?.error?.message || j?.message || lastDetail;
         } catch {
           /* keep raw */
         }
+
+        // A wrong model name is worth retrying with the next candidate;
+        // auth/permission errors are not.
+        const modelIssue =
+          res.status === 404 ||
+          (res.status === 400 && /model/i.test(lastDetail));
+        if (!modelIssue || i === candidates.length - 1) break;
+      }
+
+      if (!solved) {
+        const authIssue = lastStatus === 401 || lastStatus === 403;
         return NextResponse.json(
           {
             success: false,
-            error: `Your API key request failed (${upstream.status}): ${detail}`,
+            error:
+              `Your ${provider.name} API key was rejected (${lastStatus}): ${lastDetail}` +
+              (authIssue
+                ? ` — Open Settings (key icon) and re-paste the full ${provider.name} key.`
+                : ''),
           },
           { status: 502 }
         );
