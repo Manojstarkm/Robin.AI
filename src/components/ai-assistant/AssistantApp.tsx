@@ -87,7 +87,7 @@ export default function AssistantApp() {
   const levelRafRef = useRef(0);
   const levelDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
 
-  // Restore saved language + API settings
+  // Restore saved language + API settings + chat history
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem('robin-lang');
@@ -101,10 +101,49 @@ export default function AssistantApp() {
       setHasKey(!!k);
       setApiBase(window.localStorage.getItem('robin-api-base') || '');
       setModel(window.localStorage.getItem('robin-api-model') || '');
+      // Conversation history survives reloads too
+      const raw = window.localStorage.getItem('robin-chat');
+      if (raw) {
+        const parsed = JSON.parse(raw) as Message[];
+        if (Array.isArray(parsed)) {
+          setMessages(
+            parsed.filter(
+              (m) =>
+                m &&
+                (m.role === 'user' || m.role === 'assistant') &&
+                typeof m.content === 'string'
+            )
+          );
+          if (parsed.length) setShowHint(false);
+        }
+      }
     } catch {
       /* private mode */
     }
   }, []);
+
+  // Persist the conversation (last 50 messages) as it grows
+  useEffect(() => {
+    try {
+      if (messages.length) {
+        window.localStorage.setItem(
+          'robin-chat',
+          JSON.stringify(messages.slice(-50))
+        );
+      } else {
+        window.localStorage.removeItem('robin-chat');
+      }
+    } catch {
+      /* private mode */
+    }
+  }, [messages]);
+
+  // First-run hint also fades away on its own after 7s
+  useEffect(() => {
+    if (!showHint) return;
+    const t = window.setTimeout(() => setShowHint(false), 7000);
+    return () => window.clearTimeout(t);
+  }, [showHint]);
 
   // Warm up the speech-synthesis voice list (populates async in Chrome)
   useEffect(() => {
