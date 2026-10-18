@@ -17,8 +17,14 @@ back to you instantly.
 - **English + Tamil** — auto language detection plus a manual
   Auto / தமிழ் / English switch; Tamil uses native browser voices when
   available, with a server-side TTS fallback
+- **Bring your own API key** — paste a Z.ai (or any OpenAI-compatible) key
+  in Settings (key icon); ROBIN then calls the model directly with your key
+  (`glm-4.5-flash` is free) instead of relying on the shared backend
+- **6-pose avatar animation** — distinct listening and thinking poses plus
+  two alternating talk frames, and the lip animation starts only when the
+  voice is actually audible
 - **Ask anything** — configured for open, direct answers across topics
-- **Android app** — signed WebView-shell APK that loads the deployed app
+- **Android app** — signed WebView-shell APK with a cyber-robin launcher icon
 
 ## Tech Stack
 
@@ -81,7 +87,7 @@ in. For Tamil voice:
 ## Android APK
 
 `scripts/build-apk.sh` assembles and signs the APK (launcher label
-**ROBIN AI**, versionName 1.1.0) with a raw aapt2 → javac → d8 → zipalign →
+**ROBIN AI**, versionName 1.2.0) with a raw aapt2 → javac → d8 → zipalign →
 apksigner pipeline:
 
 ```bash

@@ -10,6 +10,11 @@ import {
   Trash2,
   Sparkles,
   Globe,
+  KeyRound,
+  X,
+  Eye,
+  EyeOff,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
@@ -39,6 +44,10 @@ const LANG_META: Record<LangMode, { label: string; title: string }> = {
 };
 const TAMIL_RE = /[\u0B80-\u0BFF]/;
 
+const API_BASE_PLACEHOLDER = 'https://api.z.ai/api/paas/v4';
+const MODEL_PLACEHOLDER = 'glm-4.5-flash';
+const GET_KEY_URL = 'https://z.ai/manage-apikey/apikey-list';
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -52,6 +61,12 @@ export default function AssistantApp() {
   const [muted, setMuted] = useState(false);
   const [showHint, setShowHint] = useState(true);
   const [lang, setLang] = useState<LangMode>('auto');
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [apiBase, setApiBase] = useState('');
+  const [model, setModel] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [hasKey, setHasKey] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -69,11 +84,16 @@ export default function AssistantApp() {
   const levelRafRef = useRef(0);
   const levelDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
 
-  // Restore saved language preference
+  // Restore saved language + API settings
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem('aura-lang');
+      const saved = window.localStorage.getItem('robin-lang');
       if (saved === 'auto' || saved === 'en' || saved === 'ta') setLang(saved);
+      const k = window.localStorage.getItem('robin-api-key') || '';
+      setApiKey(k);
+      setHasKey(!!k);
+      setApiBase(window.localStorage.getItem('robin-api-base') || '');
+      setModel(window.localStorage.getItem('robin-api-model') || '');
     } catch {
       /* private mode */
     }
@@ -157,6 +177,10 @@ export default function AssistantApp() {
       u.voice = voice;
       u.lang = voice.lang;
       u.rate = 0.95;
+      u.onstart = () => {
+        // Lips move only when the voice is actually audible
+        if (speakTokenRef.current === token) setState('speaking');
+      };
       u.onend = () => {
         if (speakTokenRef.current === token) setState('idle');
       };
@@ -189,7 +213,8 @@ export default function AssistantApp() {
         return;
       }
       const token = ++speakTokenRef.current;
-      setState('speaking');
+      // NOTE: stay in 'thinking' until audio actually starts playing — the
+      // avatar must never move her lips before her voice comes out.
 
       const wantsTamil =
         lang === 'ta' || (lang === 'auto' && TAMIL_RE.test(text));
@@ -216,10 +241,16 @@ export default function AssistantApp() {
             URL.revokeObjectURL(url);
             if (speakTokenRef.current === token) setState('idle');
           };
-          await audioRef.current.play().catch(() => {
-            URL.revokeObjectURL(url);
-            if (speakTokenRef.current === token) setState('idle');
-          });
+          await audioRef.current
+            .play()
+            .then(() => {
+              // Voice is actually audible now — start the talk animation
+              if (speakTokenRef.current === token) setState('speaking');
+            })
+            .catch(() => {
+              URL.revokeObjectURL(url);
+              if (speakTokenRef.current === token) setState('idle');
+            });
         }
       } catch (e) {
         console.error('TTS error:', e);
@@ -252,7 +283,14 @@ export default function AssistantApp() {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: userText, history, lang }),
+          body: JSON.stringify({
+            message: userText,
+            history,
+            lang,
+            apiKey,
+            apiBase,
+            model,
+          }),
           signal: ac.signal,
         });
         const data = await res.json();
@@ -271,11 +309,17 @@ export default function AssistantApp() {
       } catch (e) {
         if (e instanceof DOMException && e.name === 'AbortError') return;
         const msg = e instanceof Error ? e.message : 'Failed to respond';
-        toast.error('ROBIN hit a snag', { description: msg });
+        const authIssue =
+          /401|403|x-token|unauthorized|api.?key|apikey/i.test(msg);
+        toast.error('ROBIN hit a snag', {
+          description: authIssue
+            ? `${msg} — Add your own free API key: tap the key icon above.`
+            : msg,
+        });
         if (speakTokenRef.current >= 0 && !ac.signal.aborted) setState('idle');
       }
     },
-    [messages, speak, lang]
+    [messages, speak, lang, apiKey, apiBase, model]
   );
 
   /* ---------- Voice input ---------- */
@@ -447,7 +491,7 @@ export default function AssistantApp() {
     const next = LANG_CYCLE[(LANG_CYCLE.indexOf(lang) + 1) % LANG_CYCLE.length];
     setLang(next);
     try {
-      window.localStorage.setItem('aura-lang', next);
+      window.localStorage.setItem('robin-lang', next);
     } catch {
       /* private mode */
     }
@@ -506,6 +550,20 @@ export default function AssistantApp() {
           >
             <Globe className="w-4 h-4" />
             <span className="text-xs font-medium">{LANG_META[lang].label}</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowSettings(true)}
+            className={cn(
+              'hover:bg-white/10',
+              hasKey
+                ? 'text-cyan-300 hover:text-cyan-200'
+                : 'text-white/70 hover:text-white'
+            )}
+            title="API key settings"
+          >
+            <KeyRound className="w-4 h-4" />
           </Button>
           <Button
             variant="ghost"
@@ -641,6 +699,170 @@ export default function AssistantApp() {
           </form>
         </aside>
       </main>
+
+      {/* ===== Settings modal — bring your own API key ===== */}
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowSettings(false)}
+          >
+            <motion.div
+              className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d1126]/95 p-5 shadow-2xl shadow-cyan-500/10"
+              initial={{ opacity: 0, y: 24, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.96 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-cyan-300" />
+                  Connect your own AI
+                </h3>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="text-white/50 hover:text-white"
+                  aria-label="Close settings"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-xs text-white/45 leading-relaxed mb-4">
+                Paste your own API key and ROBIN talks directly through it. Your
+                key stays on this device and is only sent with your chat
+                requests to this app&apos;s server.
+              </p>
+
+              <label className="block text-[11px] font-medium text-white/60 mb-1">
+                API key
+              </label>
+              <div className="relative mb-3">
+                <input
+                  type={showKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Paste your key here…"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2 pr-10 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((s) => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/80"
+                  aria-label={showKey ? 'Hide key' : 'Show key'}
+                >
+                  {showKey ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+
+              <label className="block text-[11px] font-medium text-white/60 mb-1">
+                API base URL <span className="text-white/30">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={apiBase}
+                onChange={(e) => setApiBase(e.target.value)}
+                placeholder={API_BASE_PLACEHOLDER}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 mb-3"
+              />
+
+              <label className="block text-[11px] font-medium text-white/60 mb-1">
+                Model <span className="text-white/30">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder={MODEL_PLACEHOLDER}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 mb-2"
+              />
+
+              <a
+                href={GET_KEY_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200 mb-4"
+              >
+                Get a free Z.ai API key — GLM-4.5-Flash is free
+                <ExternalLink className="w-3 h-3" />
+              </a>
+
+              <div className="flex gap-2 mt-1">
+                <Button
+                  className="flex-1 bg-gradient-to-r from-cyan-500 to-violet-500 hover:from-cyan-400 hover:to-violet-400 text-white border-0"
+                  onClick={() => {
+                    try {
+                      if (apiKey.trim()) {
+                        window.localStorage.setItem(
+                          'robin-api-key',
+                          apiKey.trim()
+                        );
+                      } else {
+                        window.localStorage.removeItem('robin-api-key');
+                      }
+                      if (apiBase.trim()) {
+                        window.localStorage.setItem(
+                          'robin-api-base',
+                          apiBase.trim()
+                        );
+                      } else {
+                        window.localStorage.removeItem('robin-api-base');
+                      }
+                      if (model.trim()) {
+                        window.localStorage.setItem(
+                          'robin-api-model',
+                          model.trim()
+                        );
+                      } else {
+                        window.localStorage.removeItem('robin-api-model');
+                      }
+                    } catch {
+                      /* private mode */
+                    }
+                    setApiKey(apiKey.trim());
+                    setHasKey(!!apiKey.trim());
+                    setShowSettings(false);
+                    toast.success(
+                      apiKey.trim()
+                        ? 'API key saved — ROBIN will use your own AI now'
+                        : 'API key cleared — using the built-in backend'
+                    );
+                  }}
+                >
+                  Save
+                </Button>
+                {hasKey && (
+                  <Button
+                    variant="outline"
+                    className="border-white/15 bg-transparent text-white/70 hover:bg-white/10 hover:text-white"
+                    onClick={() => {
+                      setApiKey('');
+                      setHasKey(false);
+                      try {
+                        window.localStorage.removeItem('robin-api-key');
+                      } catch {
+                        /* private mode */
+                      }
+                      toast.success(
+                        'API key cleared — using the built-in backend'
+                      );
+                    }}
+                  >
+                    Clear key
+                  </Button>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <audio ref={audioRef} className="hidden" />
 

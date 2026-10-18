@@ -107,7 +107,7 @@ export default function AICompanion({
     };
   }, []);
 
-  /* --- Talk loop: mouth flaps while she is speaking --- */
+  /* --- Talk loop: alternate two mouth shapes while she is speaking --- */
   useEffect(() => {
     if (state !== 'speaking') return;
     let alive = true;
@@ -202,6 +202,11 @@ export default function AICompanion({
         }
       }}
     >
+      {/*
+        ===== Layer 3: the girl — 6-frame animation system =====
+        base (idle/breathing) · blink · listening pose · thinking pose ·
+        two alternating talk frames (real lip-flap while audio plays)
+      */}
       {/* ===== Layer 1: state aura glow ===== */}
       <motion.div
         className="absolute left-1/2 top-[40%] h-[85%] w-[85%] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
@@ -319,34 +324,70 @@ export default function AICompanion({
           }}
         >
           <img
-            src="/aura-girl.png"
+            src="/robin-girl.png"
             alt="ROBIN"
             draggable={false}
             className="absolute inset-0 h-full w-full object-cover object-top transition-[filter] duration-1000 group-hover:brightness-110"
             style={maskStyle}
           />
-          {/* blink frame */}
+          {/* listening pose (distinct artwork) */}
           <img
-            src="/aura-girl-blink.png"
+            src="/robin-girl-listen.png"
             alt=""
             draggable={false}
             className="absolute inset-0 h-full w-full object-cover object-top"
             style={{
               ...maskStyle,
-              opacity: blink && state !== 'speaking' ? 1 : 0,
+              opacity: state === 'listening' ? 1 : 0,
+              transition: 'opacity 180ms ease-out',
+            }}
+          />
+          {/* thinking pose (distinct artwork) */}
+          <img
+            src="/robin-girl-think.png"
+            alt=""
+            draggable={false}
+            className="absolute inset-0 h-full w-full object-cover object-top"
+            style={{
+              ...maskStyle,
+              opacity: state === 'thinking' ? 1 : 0,
+              transition: 'opacity 180ms ease-out',
+            }}
+          />
+          {/* blink frame (idle only) */}
+          <img
+            src="/robin-girl-blink.png"
+            alt=""
+            draggable={false}
+            className="absolute inset-0 h-full w-full object-cover object-top"
+            style={{
+              ...maskStyle,
+              opacity: blink && state === 'idle' ? 1 : 0,
               transition: 'opacity 70ms linear',
             }}
           />
-          {/* talking frame */}
+          {/* talking frame A (mouth open shape 1) */}
           <img
-            src="/aura-girl-talk.png"
+            src="/robin-girl-talk-a.png"
             alt=""
             draggable={false}
             className="absolute inset-0 h-full w-full object-cover object-top"
             style={{
               ...maskStyle,
               opacity: talking && state === 'speaking' ? 1 : 0,
-              transition: 'opacity 70ms linear',
+              transition: 'opacity 60ms linear',
+            }}
+          />
+          {/* talking frame B (mouth open shape 2) — alternates with A */}
+          <img
+            src="/robin-girl-talk-b.png"
+            alt=""
+            draggable={false}
+            className="absolute inset-0 h-full w-full object-cover object-top"
+            style={{
+              ...maskStyle,
+              opacity: !talking && state === 'speaking' ? 1 : 0,
+              transition: 'opacity 60ms linear',
             }}
           />
           {/* listening: emerald tint wash */}

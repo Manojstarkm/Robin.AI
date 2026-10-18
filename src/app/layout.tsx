@@ -19,7 +19,8 @@ export const metadata: Metadata = {
   keywords: ["AI assistant", "voice AI", "3D avatar", "speech to text", "text to speech", "GLM"],
   authors: [{ name: "ROBIN AI" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/robin-icon.png",
+    apple: "/robin-icon.png",
   },
   openGraph: {
     title: "ROBIN AI · Your Voice AI Companion",
