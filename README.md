@@ -29,6 +29,17 @@ back to you instantly.
 - **Ask anything** — configured for open, direct answers across topics
 - **Android app** — signed WebView-shell APK with a cyber-robin launcher icon
 
+## Download the Android app
+
+The signed APK ships with the project and is served by the web app itself:
+
+- Direct link: **`/robin-ai.apk`** (also available in the repo at
+  `public/robin-ai.apk` and via the in-app download button)
+- On your phone, open the link, download the file, then tap it and allow
+  "Install from unknown sources" when Android asks (the APK is signed with a
+  self-signed key, so this prompt is expected)
+- Requires Android 6.0+; microphone permission is requested on first use
+
 ## Tech Stack
 
 | Layer | Tech |

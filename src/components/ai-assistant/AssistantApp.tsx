@@ -12,6 +12,7 @@ import {
   Globe,
   KeyRound,
   PersonStanding,
+  Download,
   X,
   Eye,
   EyeOff,
@@ -675,6 +676,15 @@ export default function AssistantApp() {
           <Button
             variant="ghost"
             size="icon"
+            className="text-white/70 hover:text-white hover:bg-white/10 h-8 w-8 hidden sm:inline-flex"
+            title="Download Android APK"
+            onClick={() => window.open('/robin-ai.apk', '_blank')}
+          >
+            <Download className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={clearChat}
             className="text-white/70 hover:text-white hover:bg-white/10 h-8 w-8"
             title="Clear conversation"
@@ -743,6 +753,14 @@ export default function AssistantApp() {
                     ஆங்கிலம் அல்லது தமிழில் எதையும் கேளுங்கள்.
                   </span>
                 </p>
+                <a
+                  href="/robin-ai.apk"
+                  download="ROBIN-AI.apk"
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-cyan-500/20 to-violet-500/20 border border-cyan-400/30 text-xs font-medium text-cyan-200 hover:from-cyan-500/30 hover:to-violet-500/30 hover:text-cyan-100 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Get the Android app (APK)
+                </a>
               </div>
             ) : (
               messages.map((m) => (
