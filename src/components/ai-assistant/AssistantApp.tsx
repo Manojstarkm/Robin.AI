@@ -260,21 +260,37 @@ export default function AssistantApp() {
 
   /* ---------- Speech output ---------- */
 
+  // TTS-safe text: human chat style includes emojis and markdown marks that
+  // voices read out garbage — strip them before anything is spoken
+  function cleanForSpeech(t: string): string {
+    return t
+      .replace(
+        /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu,
+        ''
+      )
+      .replace(/[*_`#>|~]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   // Native browser Tamil voice (high quality on Chrome / Android when installed)
   const speakWithBrowserTamil = useCallback((text: string, token: number) => {
     try {
       if (typeof window === 'undefined' || !('speechSynthesis' in window))
         return false;
       const synth = window.speechSynthesis;
-      const voice = synth
+      const taVoices = synth
         .getVoices()
-        .find((v) => v.lang?.toLowerCase().startsWith('ta'));
+        .filter((v) => v.lang?.toLowerCase().startsWith('ta'));
+      // Google's Tamil voice sounds the most natural when present
+      const voice =
+        taVoices.find((v) => /google/i.test(v.name)) ?? taVoices[0];
       if (!voice) return false;
       synth.cancel();
       const u = new SpeechSynthesisUtterance(text);
       u.voice = voice;
       u.lang = voice.lang;
-      u.rate = 0.95;
+      u.rate = 0.9; // slightly slow — Tamil pronunciation needs the room
       u.onstart = () => {
         // Lips move only when the voice is actually audible
         if (speakTokenRef.current === token) setState('speaking');
@@ -306,7 +322,8 @@ export default function AssistantApp() {
 
   const speak = useCallback(
     async (text: string) => {
-      if (muted || !text.trim()) {
+      const spoken = cleanForSpeech(text);
+      if (muted || !spoken) {
         setState('idle');
         return;
       }
@@ -315,14 +332,14 @@ export default function AssistantApp() {
       // avatar must never move her lips before her voice comes out.
 
       const wantsTamil =
-        lang === 'ta' || (lang === 'auto' && TAMIL_RE.test(text));
-      if (wantsTamil && speakWithBrowserTamil(text, token)) return;
+        lang === 'ta' || (lang === 'auto' && TAMIL_RE.test(spoken));
+      if (wantsTamil && speakWithBrowserTamil(spoken, token)) return;
 
       try {
         const res = await fetch('/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, voice: 'tongtong', speed: 1.0 }),
+          body: JSON.stringify({ text: spoken, voice: 'tongtong', speed: 1.0 }),
         });
         if (!res.ok) {
           throw new Error('TTS failed');
