@@ -1,14 +1,19 @@
 #!/bin/bash
 # Build ROBIN AI Android APK (raw pipeline: aapt2 -> javac -> d8 -> zipalign -> apksigner)
+# Project sources live IN-REPO at android/ so workspace rollbacks can't kill them.
 set -euo pipefail
 
 TOOLS=/home/z/android-build/tools
-JDK="$TOOLS/jdk-21.0.12.1+1"
+JDK="$(ls -d "$TOOLS"/jdk-21* 2>/dev/null | head -1)"
 BT="$TOOLS/build-tools-34"
 PLATFORM="$TOOLS/android-34/android.jar"
-PROJ=/home/z/android-build/project
+PROJ=/home/z/my-project/android
 BUILD="$PROJ/build"
 OUT_APK=/home/z/my-project/download/ROBIN-AI.apk
+PUB_APK=/home/z/my-project/public/robin-ai.apk
+
+VERSION_CODE=7
+VERSION_NAME=1.5.0
 
 JAVA="$JDK/bin/java"
 JAVAC="$JDK/bin/javac"
@@ -30,8 +35,8 @@ echo "==> aapt2 link"
     --java "$BUILD/gen" \
     --min-sdk-version 23 \
     --target-sdk-version 34 \
-    --version-code 6 \
-    --version-name 1.4.0 \
+    --version-code "$VERSION_CODE" \
+    --version-name "$VERSION_NAME" \
     "$BUILD/res.zip"
 
 echo "==> javac"
@@ -61,6 +66,8 @@ echo "==> zipalign"
 "$BT/zipalign" -f 4 "$BUILD/unsigned.apk" "$BUILD/aligned.apk"
 
 echo "==> keystore"
+# Keystore is COMMITTED to the repo so every future build keeps the same
+# signature — users can install updates over the old app without uninstalling.
 KS="$PROJ/robin.keystore"
 if [ ! -f "$KS" ]; then
     "$KEYTOOL" -genkeypair -v \
@@ -82,4 +89,6 @@ echo "==> verify"
 
 mkdir -p "$(dirname "$OUT_APK")"
 cp "$BUILD/ROBIN.apk" "$OUT_APK"
+cp "$BUILD/ROBIN.apk" "$PUB_APK"
 echo "==> DONE: $OUT_APK ($(du -h "$OUT_APK" | cut -f1))"
+echo "==> also copied to $PUB_APK (served at /robin-ai.apk)"

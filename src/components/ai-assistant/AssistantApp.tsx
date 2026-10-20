@@ -100,6 +100,14 @@ interface Message {
   content: string;
 }
 
+// Shape of /app-version.json — bumped on every APK release
+interface AppUpdateInfo {
+  versionCode: number;
+  versionName: string;
+  apkUrl: string;
+  notes?: string;
+}
+
 export default function AssistantApp() {
   const [state, setState] = useState<AssistantState>('idle');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -114,6 +122,8 @@ export default function AssistantApp() {
   const [model, setModel] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [hasKey, setHasKey] = useState(false);
+  // Newer APK available (checked only inside the Android shell)
+  const [update, setUpdate] = useState<AppUpdateInfo | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -196,6 +206,71 @@ export default function AssistantApp() {
     const t = window.setTimeout(() => setShowHint(false), 7000);
     return () => window.clearTimeout(t);
   }, [showHint]);
+
+  // In-app update check — APK shell only (the shell exposes window.Robin).
+  // v1.5.0+ shells report their own version via Robin.getVersion(); older
+  // shells don't, so they get the banner as soon as a new release lands.
+  useEffect(() => {
+    const w = window as unknown as {
+      Robin?: { getVersion?: () => string; retry?: () => void };
+    };
+    if (!w.Robin) return; // running in a normal browser — always up to date
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/app-version.json', { cache: 'no-store' });
+        if (!res.ok || cancelled) return;
+        const info = (await res.json()) as AppUpdateInfo;
+        if (
+          !info ||
+          typeof info.versionCode !== 'number' ||
+          !info.apkUrl ||
+          cancelled
+        )
+          return;
+        const raw = w.Robin?.getVersion?.() || '';
+        const m = raw.match(/\((\d+)\)/);
+        const current = m ? parseInt(m[1], 10) : 0; // 0 = old unversioned shell
+        if (info.versionCode <= current) return;
+        try {
+          if (
+            window.localStorage.getItem('robin-update-dismissed') ===
+            String(info.versionCode)
+          )
+            return; // user already dismissed this release
+        } catch {
+          /* private mode — still show */
+        }
+        if (!cancelled) setUpdate(info);
+      } catch {
+        /* offline / private mode — skip */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Tap → hand the APK URL to the shell. v1.5.0+ shells route this through
+  // Android's DownloadManager (auto-prompts install when done).
+  const applyUpdate = useCallback(() => {
+    if (!update) return;
+    window.location.href = update.apkUrl;
+  }, [update]);
+
+  const dismissUpdate = useCallback(() => {
+    if (update) {
+      try {
+        window.localStorage.setItem(
+          'robin-update-dismissed',
+          String(update.versionCode)
+        );
+      } catch {
+        /* private mode */
+      }
+    }
+    setUpdate(null);
+  }, [update]);
 
   // Warm up the speech-synthesis voice list (populates async in Chrome)
   useEffect(() => {
@@ -763,6 +838,35 @@ export default function AssistantApp() {
           </Button>
         </div>
       </header>
+
+      {/* Update banner — only appears inside the Android shell when a newer APK exists */}
+      <AnimatePresence>
+        {update && (
+          <motion.div
+            initial={{ opacity: 0, y: -14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -14 }}
+            transition={{ duration: 0.3 }}
+            className="fixed top-14 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 pl-4 pr-2 py-1.5 rounded-full bg-gradient-to-r from-cyan-500/25 to-violet-500/25 border border-cyan-400/40 backdrop-blur-xl shadow-lg shadow-cyan-500/10"
+          >
+            <button
+              onClick={applyUpdate}
+              className="flex items-center gap-2 text-xs font-medium text-cyan-100 hover:text-white"
+              title={update.notes || 'Download the new APK'}
+            >
+              <Download className="w-3.5 h-3.5" />
+              ROBIN v{update.versionName} ready — tap to update
+            </button>
+            <button
+              onClick={dismissUpdate}
+              className="p-1 text-white/40 hover:text-white/80"
+              title="Dismiss this update"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main */}
       <main className="relative z-10 flex-1 flex flex-col lg:flex-row gap-6 px-4 sm:px-6 pb-6 min-h-0">
