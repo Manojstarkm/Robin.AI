@@ -32,14 +32,32 @@ back to you instantly.
 
 ## Download the Android app
 
-The signed APK ships with the project and is served by the web app itself:
+Three ways to get the latest APK (all serve the same signed build):
 
-- Direct link: **`/robin-ai.apk`** (also available in the repo at
-  `public/robin-ai.apk` and via the in-app download button)
-- On your phone, open the link, download the file, then tap it and allow
-  "Install from unknown sources" when Android asks (the APK is signed with a
-  self-signed key, so this prompt is expected)
-- Requires Android 6.0+; microphone permission is requested on first use
+- **GitHub Releases (permanent link):**
+  **`https://github.com/Manojstarkm/Robin.AI/releases/latest/download/ROBIN-AI.apk`**
+- Direct link served by the web app: **`/robin-ai.apk`**
+- Inside the app: the download button in the header, or the update banner
+  when a new version is out
+
+On your phone, open the link, download the file, then tap it and allow
+"Install from unknown sources" when Android asks (the APK is signed with a
+self-signed key, so this prompt is expected). Requires Android 6.0+;
+microphone permission is requested on first use.
+
+### How updates work
+
+- **Web features (persona, replies, UI fixes) update automatically** — the
+  app loads the live website, so friends just reopen the app to get them.
+- **App-shell updates** are announced by an in-app banner ("ROBIN vX.Y.Z
+  ready — tap to update"). Tapping it downloads the new APK through
+  Android's Download Manager; open the notification to install.
+- From v1.5.0 on, every APK keeps the same signing key (committed in
+  `android/robin.keystore`), so updates **install over the old app without
+  uninstalling** — your API key and chat history are kept.
+- One-time note for v1.4.0-and-older installs: the key was re-created after
+  a build-machine loss, so install v1.5.0 by **uninstalling the old app
+  first** (note your API key before uninstalling).
 
 ## Tech Stack
 
