@@ -1,9 +1,9 @@
 {
   "appName": "ROBIN AI",
-  "versionCode": 7,
-  "versionName": "1.5.0",
+  "versionCode": 8,
+  "versionName": "1.6.0",
   "apkUrl": "/robin-ai.apk",
   "githubUrl": "https://github.com/Manojstarkm/Robin.AI/releases/latest",
   "released": "2026-10-21",
-  "notes": "In-app update checker: ROBIN now tells you when a new version is out and downloads it in one tap. Future updates install over the old app without losing your key or chats."
+  "notes": "ROBIN is fully ours now: her own GLM brain runs every chat (no Google key needed), and she will always say she was created by Manoj M of Stark Industry — never Google."
 }

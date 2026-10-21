@@ -111,7 +111,7 @@ function friendlyGoogleError(status: number, detail: string): string {
     return "Google Gemini isn't available on this network's region — switch to mobile data (or another Wi-Fi) and try again.";
   }
   if (status === 429) {
-    return "ROBIN's free Google quota is used up right now — try again in a minute, or add your own free key from aistudio.google.com/apikey in Settings.";
+    return "Your Google key's free quota is used up right now — try again in a minute, or create a fresh free key at aistudio.google.com/apikey and paste it in Settings.";
   }
   if (status === 401 || status === 403) {
     return `Google rejected the API key (${status}): ${detail} — make sure the whole key was pasted and is still active.`;

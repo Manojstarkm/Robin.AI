@@ -12,8 +12,8 @@ BUILD="$PROJ/build"
 OUT_APK=/home/z/my-project/download/ROBIN-AI.apk
 PUB_APK=/home/z/my-project/public/robin-ai.apk
 
-VERSION_CODE=7
-VERSION_NAME=1.5.0
+VERSION_CODE=8
+VERSION_NAME=1.6.0
 
 JAVA="$JDK/bin/java"
 JAVAC="$JDK/bin/javac"
