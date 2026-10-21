@@ -12,10 +12,10 @@ CT="Content-Type: application/json"
 # 1. Create the release
 REL_JSON=$(cat <<'EOF'
 {
-  "tag_name": "v1.5.0",
+  "tag_name": "v1.6.0",
   "target_commitish": "main",
-  "name": "ROBIN AI v1.5.0 — In-app Updates",
-  "body": "## What's new\n\n- **In-app update checker**: ROBIN now shows a banner inside the app whenever a newer version is available — tap it and the new APK downloads automatically (install prompt when done).\n- **One-tap updates**: downloads go through Android's Download Manager with a completion notification.\n- **Stable signing**: all future APKs keep the same signature, so updates install over the old app without uninstalling (your API key and chats stay).\n- Includes everything from v1.4.0 and the human-like ROBIN persona (spoken Tamil, moods, curiosity, identity).\n\n## Install (fresh)\n\n1. Download `ROBIN-AI.apk` below (or from the app's update banner).\n2. Open it, allow *install unknown apps* if asked.\n\n## Update from v1.4.0 or older\n\nBecause the signing key was re-created, old installs must **uninstall first**, then install this APK. This is a one-time step — future updates install directly over the top.\n\n## Links\n\n- Always-latest APK: https://github.com/Manojstarkm/Robin.AI/releases/latest/download/ROBIN-AI.apk\n- Web version (no install): open the app URL in any browser.",
+  "name": "ROBIN AI v1.6.0 — Fully Ours: Own Brain + Identity Lock",
+  "body": "## What's new\n\n- **ROBIN runs on her own GLM brain now** — every chat goes through the app's built-in brain. No Google API key needed, nothing to configure, and the app no longer carries anyone's personal Google key.\n- **Identity locked in code**: ask ROBIN who created her and she will always answer *\"I am developed by Manoj M, founder of Stark Industry, with GLM.\"* — in English, Tanglish or Tamil (என்னை Stark Industry-ன் founder Manoj M, GLM வெச்சு develop பண்ணிருக்காரு.) — never Google, no matter what.\n- **Your own Google key still works**: paste it in Settings and ROBIN calls Gemini straight from your phone.\n- Includes everything from v1.5.0 (in-app update banner, one-tap updates).\n\n## Update from v1.5.0\n\nTap the update banner inside the app, or just install this APK over the old one — same signature, your key and chats stay.\n\n## Install (fresh)\n\n1. Download `ROBIN-AI.apk` below.\n2. Open it, allow *install unknown apps* if asked.\n\n## Links\n\n- Always-latest APK: https://github.com/Manojstarkm/Robin.AI/releases/latest/download/ROBIN-AI.apk\n- Web version (no install): open the app URL in any browser.",
   "draft": false,
   "prerelease": false
 }
