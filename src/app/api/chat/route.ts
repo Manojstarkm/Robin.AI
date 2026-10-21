@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildSystemPrompt } from '@/lib/persona';
+import { buildSystemPrompt, enforceIdentity } from '@/lib/persona';
 import { rollMood, moodDirective } from '@/lib/moods';
 
 export const runtime = 'nodejs';
@@ -256,7 +256,10 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({
         success: true,
-        response: responseText || 'Sorry, I did not catch that.',
+        response: enforceIdentity(
+          message,
+          responseText || 'Sorry, I did not catch that.'
+        ),
       });
     }
 
@@ -284,7 +287,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      response: responseText,
+      response: enforceIdentity(message, responseText),
     });
   } catch (error) {
     console.error('Chat API Error:', error);

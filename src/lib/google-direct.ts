@@ -2,9 +2,9 @@
    WHY CLIENT-SIDE: ROBIN's server runs in Hong Kong, which Google blocks —
    every server-side call to generativelanguage.googleapis.com dies with
    400 "User location is not supported". Phones in India (where ROBIN's
-   users are) ARE supported, so Google traffic goes straight from the device.
-   This applies BOTH to the user's own Google key and to the built-in key
-   provided by Manoj M so everyone can chat for free. */
+   users are) ARE supported, so when a user adds THEIR OWN Google key it is
+   used straight from the device. Keyless users don't need Google at all —
+   they chat on ROBIN's built-in GLM brain via the server. */
 
 export const GOOGLE_OPENAI_BASE =
   'https://generativelanguage.googleapis.com/v1beta/openai';
@@ -18,20 +18,6 @@ const GOOGLE_FALLBACK_MODELS = [
   'gemini-2.5-flash',
   'gemini-2.0-flash',
 ];
-
-// Built-in key (provided by Manoj M, founder of Stark Industry) used when
-// the user has no key of their own. Stored base64 so the repo isn't
-// trivially scrapable by grepping for key prefixes; decoded at runtime.
-const BUILTIN_GOOGLE_KEY_B64 =
-  'QVEuQWI4Uk42SUNJOFQtcXh6elNES0lMdHJ5c3B5dDVfb213MTZ4OHc0YUU0MnM5Mkp5cWc=';
-
-export function builtinGoogleKey(): string {
-  try {
-    return atob(BUILTIN_GOOGLE_KEY_B64);
-  } catch {
-    return '';
-  }
-}
 
 interface GoogleDirectArgs {
   apiKey: string;

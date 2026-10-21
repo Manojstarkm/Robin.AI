@@ -24,9 +24,9 @@ import { Switch } from '@/components/ui/switch';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { buildSystemPrompt } from '@/lib/persona';
+import { buildSystemPrompt, enforceIdentity } from '@/lib/persona';
 import { rollMood, moodDirective } from '@/lib/moods';
-import { googleDirectChat, builtinGoogleKey } from '@/lib/google-direct';
+import { googleDirectChat } from '@/lib/google-direct';
 import {
   getSpeechRecognition,
   type SpeechRecognitionLike,
@@ -477,13 +477,15 @@ export default function AssistantApp() {
       // Shared success path: append ROBIN's reply and speak it
       const deliver = async (aiText: string) => {
         if (ac.signal.aborted) return;
+        // Identity guard: a creator question can NEVER credit Google/others
+        const finalText = enforceIdentity(userText, aiText);
         const aiMsg: Message = {
           id: `a-${Date.now()}`,
           role: 'assistant',
-          content: aiText,
+          content: finalText,
         };
         setMessages((prev) => [...prev, aiMsg]);
-        await speak(aiText);
+        await speak(finalText);
       };
       // Full persona + this request's mood — same recipe the server uses
       const sys = buildSystemPrompt(lang) + moodDirective(rollMood());
@@ -509,28 +511,8 @@ export default function AssistantApp() {
           return;
         }
 
-        /* No key at all → use the built-in key (Manoj's gift to every user).
-           If Google refuses (quota/region/network), fall back to the server. */
-        if (!apiKey.trim() && !customBase) {
-          try {
-            const aiText = await googleDirectChat({
-              apiKey: builtinGoogleKey(),
-              systemPrompt: sys,
-              history,
-              message: userText,
-              signal: ac.signal,
-            });
-            await deliver(aiText);
-            return;
-          } catch (ge) {
-            if (ge instanceof DOMException && ge.name === 'AbortError') return;
-            console.warn(
-              '[ROBIN] built-in Google brain unavailable → server fallback:',
-              ge instanceof Error ? ge.message : ge
-            );
-            setState('thinking');
-          }
-        }
+        /* No key at all → ROBIN's own built-in GLM brain via the server
+           (the server route rolls its own mood + persona). */
 
         const res = await fetch('/api/chat', {
           method: 'POST',
