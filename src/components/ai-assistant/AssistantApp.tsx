@@ -24,6 +24,9 @@ import { Switch } from '@/components/ui/switch';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { buildSystemPrompt } from '@/lib/persona';
+import { rollMood, moodDirective } from '@/lib/moods';
+import { googleDirectChat, builtinGoogleKey } from '@/lib/google-direct';
 import {
   getSpeechRecognition,
   type SpeechRecognitionLike,
@@ -64,6 +67,8 @@ function sanitizeKey(k: string): string {
 }
 
 const KEY_SHAPES: { provider: string; re: RegExp }[] = [
+  // Google issues two shapes: classic "AIza…" and the newer "AQ.…" keys
+  { provider: 'Google Gemini', re: /(AQ\.[0-9A-Za-z_-]{20,})/ },
   { provider: 'Google Gemini', re: /(AIza[0-9A-Za-z_-]{10,})/ },
   { provider: 'OpenRouter', re: /(sk-or-[0-9A-Za-z_-]{10,})/ },
   { provider: 'Anthropic', re: /(sk-ant-[0-9A-Za-z_-]{10,})/ },
@@ -469,7 +474,64 @@ export default function AssistantApp() {
       setMessages((prev) => [...prev, userMsg]);
       setState('thinking');
 
+      // Shared success path: append ROBIN's reply and speak it
+      const deliver = async (aiText: string) => {
+        if (ac.signal.aborted) return;
+        const aiMsg: Message = {
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          content: aiText,
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        await speak(aiText);
+      };
+      // Full persona + this request's mood — same recipe the server uses
+      const sys = buildSystemPrompt(lang) + moodDirective(rollMood());
+
       try {
+        const detected = apiKey.trim() ? detectKeyName(apiKey) : '';
+        const customBase = apiBase.trim().length > 0;
+
+        /* Google keys are called DIRECTLY from this phone: ROBIN's server
+           sits in a region Google blocks (HK) — phones in India work. */
+        if (detected === 'Google Gemini' && !customBase) {
+          const key =
+            extractKnownKey(sanitizeKey(apiKey)) ?? sanitizeKey(apiKey);
+          const aiText = await googleDirectChat({
+            apiKey: key,
+            systemPrompt: sys,
+            history,
+            message: userText,
+            modelOverride: model.trim() || undefined,
+            signal: ac.signal,
+          });
+          await deliver(aiText);
+          return;
+        }
+
+        /* No key at all → use the built-in key (Manoj's gift to every user).
+           If Google refuses (quota/region/network), fall back to the server. */
+        if (!apiKey.trim() && !customBase) {
+          try {
+            const aiText = await googleDirectChat({
+              apiKey: builtinGoogleKey(),
+              systemPrompt: sys,
+              history,
+              message: userText,
+              signal: ac.signal,
+            });
+            await deliver(aiText);
+            return;
+          } catch (ge) {
+            if (ge instanceof DOMException && ge.name === 'AbortError') return;
+            console.warn(
+              '[ROBIN] built-in Google brain unavailable → server fallback:',
+              ge instanceof Error ? ge.message : ge
+            );
+            setState('thinking');
+          }
+        }
+
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -487,15 +549,7 @@ export default function AssistantApp() {
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Chat failed');
         }
-        if (ac.signal.aborted) return;
-        const aiText: string = data.response;
-        const aiMsg: Message = {
-          id: `a-${Date.now()}`,
-          role: 'assistant',
-          content: aiText,
-        };
-        setMessages((prev) => [...prev, aiMsg]);
-        await speak(aiText);
+        await deliver(data.response);
       } catch (e) {
         if (e instanceof DOMException && e.name === 'AbortError') return;
         const msg = e instanceof Error ? e.message : 'Failed to respond';
@@ -1115,7 +1169,8 @@ export default function AssistantApp() {
                       <span>
                         ROBIN couldn&apos;t identify this key&apos;s provider.
                         A Google Gemini key starts with{' '}
-                        <span className="font-mono">AIza</span> — if yours came
+                        <span className="font-mono">AIza</span> or the newer{' '}
+                        <span className="font-mono">AQ.</span> — if yours came
                         from Google AI Studio, tap the link below, copy the
                         whole key, and paste it again. Z.ai keys still work.
                       </span>
@@ -1236,7 +1291,7 @@ export default function AssistantApp() {
                     } else if (savedKey) {
                       toast('Key saved — but its provider is unrecognized', {
                         description:
-                          'A Google Gemini key starts with "AIza". If yours came from Google AI Studio, re-paste the whole key.',
+                          'A Google Gemini key starts with "AIza" or the newer "AQ.". If yours came from Google AI Studio, re-paste the whole key.',
                       });
                     } else {
                       toast.success(
